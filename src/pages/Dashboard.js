@@ -211,14 +211,6 @@ const Dashboard = () => {
           ))
         )}
       </div>
-
-      {/* Footer */}
-      <footer className="footer">
-        <p>
-          2024 @ Foro Peterson. All rights reserved. This system belongs to Foro
-          Peterson.
-        </p>
-      </footer>
     </div>
   );
 };
