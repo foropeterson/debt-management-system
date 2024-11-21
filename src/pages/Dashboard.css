@@ -1,7 +1,7 @@
 /* General styles for the dashboard */
 .dashboard-container {
   font-family: Arial, sans-serif;
-  padding: 20px;
+  padding: 2px;
   background-color: #f4f7fa;
 }
 
@@ -253,4 +253,9 @@ button:hover {
 
 .debt-table button:hover {
   background-color: #0056b3;
+}
+.error-message {
+  color: red;
+  font-size: 0.9rem;
+  margin-top: 0.5rem;
 }

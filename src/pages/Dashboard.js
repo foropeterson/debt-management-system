@@ -9,7 +9,7 @@ const Dashboard = () => {
   };
 
   // State variables
-  const [customers, setCustomers] = useState(getInitialCustomers);
+  const [customers, setCustomers] = useState(getInitialCustomers());
   const [newCustomer, setNewCustomer] = useState({
     name: "",
     invoiceNo: "",
@@ -23,7 +23,10 @@ const Dashboard = () => {
     description: "",
     amount: 0,
     paidAmount: 0,
+    date: new Date().toISOString().split("T")[0], // Default to current date
   });
+  const [installmentAmount, setInstallmentAmount] = useState(0); // New state for installment input
+  const [error, setError] = useState(""); // Error state for validation messages
 
   // Format currency in KES
   const formatCurrency = (amount) =>
@@ -41,7 +44,7 @@ const Dashboard = () => {
   const handleAddCustomer = (e) => {
     e.preventDefault();
     if (!newCustomer.name.trim()) {
-      alert("Customer name is required.");
+      setError("Customer name is required.");
       return;
     }
 
@@ -62,6 +65,7 @@ const Dashboard = () => {
       shopName: "",
       salesRep: "",
     });
+    setError(""); // Clear any previous error messages
   };
 
   // Handle updating an existing customer
@@ -85,6 +89,7 @@ const Dashboard = () => {
       shopName: "",
       salesRep: "",
     });
+    setError(""); // Clear any previous error messages
   };
 
   // Handle deleting a customer
@@ -108,7 +113,7 @@ const Dashboard = () => {
       !newDebt.description.trim() ||
       newDebt.amount <= 0
     ) {
-      alert("Please provide valid debt details.");
+      setError("Please provide valid debt details.");
       return;
     }
 
@@ -123,6 +128,10 @@ const Dashboard = () => {
                 description: newDebt.description.trim(),
                 amount: parseFloat(newDebt.amount),
                 paidAmount: parseFloat(newDebt.paidAmount),
+                date: newDebt.date,
+                installments: [], // Initialize empty installment array
+                balance:
+                  parseFloat(newDebt.amount) - parseFloat(newDebt.paidAmount), // Calculating balance
                 status: "Unpaid",
               },
             ],
@@ -132,11 +141,22 @@ const Dashboard = () => {
 
     setCustomers(updatedCustomers);
     saveCustomersToLocalStorage(updatedCustomers);
-    setNewDebt({ description: "", amount: 0, paidAmount: 0 });
+    setNewDebt({
+      description: "",
+      amount: 0,
+      paidAmount: 0,
+      date: new Date().toISOString().split("T")[0],
+    });
+    setError(""); // Clear any previous error messages
   };
 
-  // Handle marking debt as paid
+  // Handle marking debt as paid (with installments)
   const handleMarkAsPaid = (customerId, debtId) => {
+    if (installmentAmount <= 0) {
+      setError("Please enter a valid installment amount.");
+      return;
+    }
+
     const updatedCustomers = customers.map((customer) =>
       customer.id === customerId
         ? {
@@ -145,8 +165,18 @@ const Dashboard = () => {
               debt.id === debtId
                 ? {
                     ...debt,
-                    paidAmount: Math.min(debt.amount, debt.paidAmount), // Ensure paidAmount doesn't exceed the debt amount
-                    status: "Paid",
+                    installments: [
+                      ...debt.installments,
+                      {
+                        amount: installmentAmount,
+                        date: new Date().toISOString(),
+                      },
+                    ],
+                    paidAmount: debt.paidAmount + installmentAmount, // Adding installment
+                    balance:
+                      debt.amount - (debt.paidAmount + installmentAmount), // Recalculating balance
+                    status:
+                      debt.balance - installmentAmount <= 0 ? "Paid" : "Unpaid", // Update status if balance is 0 or less
                   }
                 : debt
             ),
@@ -156,6 +186,8 @@ const Dashboard = () => {
 
     setCustomers(updatedCustomers);
     saveCustomersToLocalStorage(updatedCustomers);
+    setInstallmentAmount(0); // Clear installment input after payment
+    setError(""); // Clear any previous error messages
   };
 
   // Handle deleting a debt
@@ -165,17 +197,15 @@ const Dashboard = () => {
     );
     if (!confirmation) return;
 
-    // Update customers by filtering out the deleted debt
     const updatedCustomers = customers.map((customer) =>
       customer.id === customerId
         ? {
             ...customer,
-            debts: customer.debts.filter((debt) => debt.id !== debtId), // Filter out the deleted debt
+            debts: customer.debts.filter((debt) => debt.id !== debtId),
           }
         : customer
     );
 
-    // Update state and localStorage
     setCustomers(updatedCustomers);
     saveCustomersToLocalStorage(updatedCustomers);
     setSelectedCustomer(null); // Reset selected customer after debt deletion
@@ -245,44 +275,51 @@ const Dashboard = () => {
             {editingCustomer ? "Update Customer" : "Add Customer"}
           </button>
         </form>
+        {error && <div className="error-message">{error}</div>}
       </div>
 
       {/* Customer List */}
       <div className="customer-list">
         <h2>Customer List</h2>
-        {customers.map((customer) => (
-          <div key={customer.id} className="customer-card">
-            <h3>{customer.name}</h3>
-            <p>
-              Total Debt:{" "}
-              {formatCurrency(
-                customer.debts.reduce((sum, debt) => sum + debt.amount, 0)
-              )}
-            </p>
-            <button onClick={() => setSelectedCustomer(customer)}>
-              Manage Debts
-            </button>
-            <button onClick={() => setEditingCustomer(customer)}>Edit</button>
-            <button onClick={() => handleDeleteCustomer(customer.id)}>
-              Delete
-            </button>
-          </div>
-        ))}
+        {customers.length > 0 ? (
+          customers.map((customer) => (
+            <div key={customer.id} className="customer-card">
+              <h3>{customer.name}</h3>
+              <button onClick={() => setSelectedCustomer(customer)}>
+                View Details
+              </button>
+              <button
+                onClick={() => {
+                  setEditingCustomer(customer);
+                  setNewCustomer(customer);
+                }}
+              >
+                Edit
+              </button>
+              <button onClick={() => handleDeleteCustomer(customer.id)}>
+                Delete
+              </button>
+            </div>
+          ))
+        ) : (
+          <p>No customers found.</p>
+        )}
       </div>
 
-      {/* Manage Debts */}
+      {/* Debt Management */}
       {selectedCustomer && (
-        <div className="debt-management">
-          <h2>Manage Debts for {selectedCustomer.name}</h2>
+        <div className="debt-section">
+          <h2>Manage Debt for {selectedCustomer.name}</h2>
+
+          {/* Add Debt */}
           <form onSubmit={handleAddDebt}>
             <input
               type="text"
-              placeholder="Debt Description"
+              placeholder="Description"
               value={newDebt.description}
               onChange={(e) =>
                 setNewDebt({ ...newDebt, description: e.target.value })
               }
-              required
             />
             <input
               type="number"
@@ -291,7 +328,6 @@ const Dashboard = () => {
               onChange={(e) =>
                 setNewDebt({ ...newDebt, amount: e.target.value })
               }
-              required
             />
             <input
               type="number"
@@ -304,32 +340,25 @@ const Dashboard = () => {
             <button type="submit">Add Debt</button>
           </form>
 
-          <div className="debt-list">
-            {selectedCustomer.debts.map((debt) => (
-              <div key={debt.id} className="debt-card">
-                <p>{debt.description}</p>
-                <p>
-                  Amount: {formatCurrency(debt.amount)} | Paid:{" "}
-                  {formatCurrency(debt.paidAmount)}
-                </p>
-                <p>Status: {debt.status}</p>
-                {debt.status === "Unpaid" && (
-                  <button
-                    onClick={() =>
-                      handleMarkAsPaid(selectedCustomer.id, debt.id)
-                    }
-                  >
-                    Mark as Paid
-                  </button>
-                )}
-                <button
-                  onClick={() => handleDeleteDebt(selectedCustomer.id, debt.id)}
-                >
-                  Delete Debt
-                </button>
-              </div>
-            ))}
-          </div>
+          {/* Installment Payment */}
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              handleMarkAsPaid(
+                selectedCustomer.id,
+                selectedCustomer.debts[0]?.id
+              );
+            }}
+          >
+            <input
+              type="number"
+              value={installmentAmount}
+              onChange={(e) => setInstallmentAmount(e.target.value)}
+              placeholder="Enter Installment Amount"
+              required
+            />
+            <button type="submit">Mark as Paid</button>
+          </form>
         </div>
       )}
     </div>
